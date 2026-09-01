@@ -51,8 +51,13 @@ Sending a handoff can also *arm* an hourly auto-responder: a scheduled cloud rou
 the user in the handoff's channels, redirecting to the new owner.
 
 - Config lives in a Drive file (`handoff-responder.json`): `active`, `owner`, `channels`,
-  `expires` (auto-disarm date), `reply_template` (`{owner}` placeholder),
+  `scope` (short description of the handed-off work, written from the handoff notes/draft
+  at arm time), `expires` (auto-disarm date), `reply_template` (`{owner}` placeholder),
   `max_replies_per_run` (rate cap), `watermark_ts` + `replied_threads` (dedupe state).
+- Relevance gate: before replying, the routine reads each thread and judges whether the
+  ping plausibly concerns `scope`. Relevant → template reply; unrelated → silent skip;
+  uncertain → no reply, flagged in the run report for manual handling. Judged threads are
+  never re-judged. Empty `scope` disables the gate (reply to every ping).
 - At send time, Claude (the app backend) resolves the new owner's Slack ID and rewrites
   the config: selected channels, owner, `expires` = +`responder_days` from the UI's
   expiry field (default 14, max 90; 0 skips arming entirely), `watermark_ts` = now.
