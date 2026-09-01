@@ -36,7 +36,12 @@ each one yourself.
 
 - prepare: `{type:"prepare", payload:{notes, who}}` →
   `{status:"ok", channels:[{id,name,meta,reason,preselected}],
-    people:[{id,name,meta,reason,preselected}], draft}`
+    people:[{id,name,meta,reason,preselected}], draft,
+    mentions:{"U…":"Display Name", …}}`
+  `mentions` maps every user id referenced in the draft (e.g. the new owner) to a display
+  name. The UI shows mentions as readable `@Display Name` and converts them back to Slack
+  `<@U…>` wire format at send time (people list + mentions map, longest name first).
+  An edited/unknown `@name` stays plain text — same as a typo'd mention in Slack.
   `people` are likely pingers: Claude searches each relevant channel for the user's
   mention token (`<@Uxxxx> in:#channel` — the `to:me` modifier is unreliable) and ranks
   who @-mentions them most / most recently. Checked people become a trailing

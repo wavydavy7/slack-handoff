@@ -113,7 +113,7 @@
       </div>
     </div>
     <label for="draft" style="margin-top:18px">Message preview</label>
-    <p class="hint">Edit freely &mdash; exactly this text is sent.</p>
+    <p class="hint">Edit freely &mdash; @Name mentions of listed people become real Slack pings on send.</p>
     <textarea id="draft"></textarea>
     <div class="row" style="margin-top:16px">
       <label for="expiry" style="margin:0">Auto-redirect pings for</label>
@@ -142,6 +142,18 @@
 <script>
 const $ = id => document.getElementById(id);
 let lastPrep = null;
+let mentionNames = {};  // Slack user id -> display name, for @mention conversion
+
+// The textarea always holds the readable form (@Edgar Arakelyan); the wire form
+// (<@U123>) is produced only at send time.
+function toDisplay(text) {
+  return text.replace(/<@(U[A-Z0-9]+)>/g, (m, id) => mentionNames[id] ? '@' + mentionNames[id] : m);
+}
+function toWire(text) {
+  const entries = Object.entries(mentionNames).sort((a, b) => b[1].length - a[1].length);
+  for (const [id, name] of entries) text = text.split('@' + name).join(`<@${id}>`);
+  return text;
+}
 
 async function request(type, payload) {
   const res = await fetch('/api/request', {
@@ -174,6 +186,7 @@ function addChannelItem(ch) {
 }
 
 function addPersonItem(p) {
+  mentionNames[p.id] = p.name;
   const el = document.createElement('label');
   el.className = 'channel';
   el.innerHTML = `
@@ -221,8 +234,9 @@ async function lookupAdd(kind, inputId, btnId) {
 
 // Keeps a trailing "cc <@U...>" line in the draft in sync with the checked people.
 function updateCc() {
-  const tags = [...document.querySelectorAll('#people input:checked')].map(cb => `<@${cb.dataset.id}>`);
-  let text = $('draft').value.replace(/\n*cc (<@[^\n]*)?$/, '').trimEnd();
+  const tags = [...document.querySelectorAll('#people input:checked')]
+    .map(cb => '@' + (mentionNames[cb.dataset.id] || cb.dataset.name));
+  let text = $('draft').value.replace(/\n*cc (@|<@)[^\n]*$/, '').trimEnd();
   if (tags.length) text += '\n\ncc ' + tags.join(' ');
   $('draft').value = text;
 }
@@ -240,11 +254,12 @@ $('prepare').onclick = async () => {
     const resp = await request('prepare', {notes, who: $('who').value.trim()});
     if (resp.status !== 'ok') throw new Error(resp.error || 'Claude reported an error.');
     lastPrep = resp;
+    mentionNames = {...(resp.mentions || {})};
     $('channels').innerHTML = '';
     for (const ch of resp.channels) addChannelItem(ch);
     $('people').innerHTML = '';
     for (const p of resp.people || []) addPersonItem(p);
-    $('draft').value = resp.draft;
+    $('draft').value = toDisplay(resp.draft);
     updateCc();
     show('step2');
   } catch (e) {
@@ -258,7 +273,7 @@ $('prepare').onclick = async () => {
 $('send').onclick = async () => {
   const channels = [...document.querySelectorAll('#channels input:checked')]
     .map(cb => ({id: cb.dataset.id, name: cb.dataset.name}));
-  const message = $('draft').value.trim();
+  const message = toWire($('draft').value.trim());
   if (!channels.length) { alert('Pick at least one channel.'); return; }
   if (!message) { alert('Message is empty.'); return; }
   $('send').disabled = true;
