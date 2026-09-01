@@ -99,10 +99,18 @@
     <label>Relevant channels</label>
     <p class="hint">Uncheck any that shouldn't get the message.</p>
     <div id="channels"></div>
-    <div id="people-wrap" class="hidden">
+    <div class="row" style="margin-top:8px">
+      <input id="add-channel" type="text" placeholder="Add another channel by name&hellip;">
+      <button id="add-channel-btn" class="ghost">Add</button>
+    </div>
+    <div id="people-wrap">
       <label style="margin-top:18px">Tag likely pingers</label>
       <p class="hint">People who ping you most in these channels &mdash; checked ones are cc'd at the end of the message so they see the handoff directly.</p>
       <div id="people"></div>
+      <div class="row" style="margin-top:8px">
+        <input id="add-person" type="text" placeholder="Add a person by name&hellip;">
+        <button id="add-person-btn" class="ghost">Add</button>
+      </div>
     </div>
     <label for="draft" style="margin-top:18px">Message preview</label>
     <p class="hint">Edit freely &mdash; exactly this text is sent.</p>
@@ -152,6 +160,65 @@ async function request(type, payload) {
   throw new Error('Timed out waiting for Claude. Is the companion session still running?');
 }
 
+function addChannelItem(ch) {
+  const el = document.createElement('label');
+  el.className = 'channel';
+  el.innerHTML = `
+    <input type="checkbox" ${ch.preselected ? 'checked' : ''} data-id="${ch.id}" data-name="${ch.name}">
+    <div>
+      <div class="name">#${ch.name}</div>
+      <div class="meta">${ch.meta || ''}</div>
+      <div class="why">${ch.reason || ''}</div>
+    </div>`;
+  $('channels').appendChild(el);
+}
+
+function addPersonItem(p) {
+  const el = document.createElement('label');
+  el.className = 'channel';
+  el.innerHTML = `
+    <input type="checkbox" ${p.preselected ? 'checked' : ''} data-id="${p.id}" data-name="${p.name}">
+    <div>
+      <div class="name">${p.name}</div>
+      <div class="meta">${p.meta || ''}</div>
+      <div class="why">${p.reason || ''}</div>
+    </div>`;
+  el.querySelector('input').addEventListener('change', updateCc);
+  $('people').appendChild(el);
+}
+
+// Manual add: resolve a typed name against Slack via the Claude bridge.
+async function lookupAdd(kind, inputId, btnId) {
+  const q = $(inputId).value.trim();
+  if (!q) return;
+  const btn = $(btnId);
+  btn.disabled = true;
+  btn.textContent = 'Searching…';
+  try {
+    const resp = await request('lookup', {kind, query: q});
+    if (resp.status !== 'ok') throw new Error(resp.error || 'Lookup failed.');
+    const listSel = kind === 'channel' ? '#channels input' : '#people input';
+    const existing = new Set([...document.querySelectorAll(listSel)].map(cb => cb.dataset.id));
+    const fresh = (resp.matches || []).filter(m => !existing.has(m.id));
+    if (!fresh.length) {
+      alert(resp.matches?.length ? 'Already in the list.' : `No Slack match for "${q}".`);
+      return;
+    }
+    // A single match is added checked; multiple matches are added unchecked to pick from.
+    for (const m of fresh) {
+      const item = {...m, preselected: fresh.length === 1, reason: m.reason || 'Added manually.'};
+      kind === 'channel' ? addChannelItem(item) : addPersonItem(item);
+    }
+    if (kind === 'person') updateCc();
+    $(inputId).value = '';
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Add';
+  }
+}
+
 // Keeps a trailing "cc <@U...>" line in the draft in sync with the checked people.
 function updateCc() {
   const tags = [...document.querySelectorAll('#people input:checked')].map(cb => `<@${cb.dataset.id}>`);
@@ -174,33 +241,9 @@ $('prepare').onclick = async () => {
     if (resp.status !== 'ok') throw new Error(resp.error || 'Claude reported an error.');
     lastPrep = resp;
     $('channels').innerHTML = '';
-    for (const ch of resp.channels) {
-      const el = document.createElement('label');
-      el.className = 'channel';
-      el.innerHTML = `
-        <input type="checkbox" ${ch.preselected ? 'checked' : ''} data-id="${ch.id}" data-name="${ch.name}">
-        <div>
-          <div class="name">#${ch.name}</div>
-          <div class="meta">${ch.meta || ''}</div>
-          <div class="why">${ch.reason || ''}</div>
-        </div>`;
-      $('channels').appendChild(el);
-    }
+    for (const ch of resp.channels) addChannelItem(ch);
     $('people').innerHTML = '';
-    $('people-wrap').classList.toggle('hidden', !(resp.people || []).length);
-    for (const p of resp.people || []) {
-      const el = document.createElement('label');
-      el.className = 'channel';
-      el.innerHTML = `
-        <input type="checkbox" ${p.preselected ? 'checked' : ''} data-id="${p.id}" data-name="${p.name}">
-        <div>
-          <div class="name">${p.name}</div>
-          <div class="meta">${p.meta || ''}</div>
-          <div class="why">${p.reason || ''}</div>
-        </div>`;
-      el.querySelector('input').addEventListener('change', updateCc);
-      $('people').appendChild(el);
-    }
+    for (const p of resp.people || []) addPersonItem(p);
     $('draft').value = resp.draft;
     updateCc();
     show('step2');
@@ -246,6 +289,8 @@ $('send').onclick = async () => {
   }
 };
 
+$('add-channel-btn').onclick = () => lookupAdd('channel', 'add-channel', 'add-channel-btn');
+$('add-person-btn').onclick = () => lookupAdd('person', 'add-person', 'add-person-btn');
 $('back').onclick = () => show('step1');
 $('again').onclick = () => { $('notes').value = ''; $('who').value = ''; show('step1'); };
 </script>

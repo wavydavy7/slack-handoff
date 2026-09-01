@@ -41,6 +41,10 @@ each one yourself.
   mention token (`<@Uxxxx> in:#channel` — the `to:me` modifier is unreliable) and ranks
   who @-mentions them most / most recently. Checked people become a trailing
   `cc <@Uxxxx>` line the UI keeps in sync with the checkboxes.
+- lookup: `{type:"lookup", payload:{kind:"channel"|"person", query}}` →
+  `{status:"ok", matches:[{id,name,meta,reason}]}` — manual add; Claude resolves the name
+  via slack_search_channels / slack_search_users. One match adds checked; several add
+  unchecked to pick from.
 - send: `{type:"send", payload:{channels:[{id,name}], message, responder_days}}` →
   `{status:"ok", results:[{channel, ok, detail}], note}`
 
