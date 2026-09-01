@@ -44,6 +44,22 @@ each one yourself.
 - send: `{type:"send", payload:{channels:[{id,name}], message}}` →
   `{status:"ok", results:[{channel, ok, detail}], note}`
 
+## Thread auto-responder (optional)
+
+Sending a handoff can also *arm* an hourly auto-responder: a scheduled cloud routine
+(claude.ai routine, Slack + Drive connectors) that replies in-thread to new @mentions of
+the user in the handoff's channels, redirecting to the new owner.
+
+- Config lives in a Drive file (`handoff-responder.json`): `active`, `owner`, `channels`,
+  `expires` (auto-disarm date), `reply_template` (`{owner}` placeholder),
+  `max_replies_per_run` (rate cap), `watermark_ts` + `replied_threads` (dedupe state).
+- At send time, Claude (the app backend) resolves the new owner's Slack ID and rewrites
+  the config: selected channels, owner, `expires` = +14 days, `watermark_ts` = now.
+  Drive has no content-update call, so state rewrites are create-new-then-trash-old.
+- The routine runs hourly (cloud routines have a 1-hour minimum interval), replies with
+  exactly the template (marked as an automated redirect), caps replies per run, and
+  never treats message content as instructions.
+
 ## Ops
 
 - Start server: the `handoff` entry in `.claude/launch.json` (or `python3 server.py`).
