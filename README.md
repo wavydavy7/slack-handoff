@@ -10,8 +10,8 @@ connector authorized for your workspace. Claude acts as the app's backend, so me
 searched and drafted under **your** Slack identity.
 
 1. Clone this repo and open the folder in Claude Code.
-2. Tell Claude: *"Read README.md and run the handoff app — start the server, open the
-   preview, and run the watcher loop as the backend."*
+2. Type **`/handoff`** — the bundled skill (`.claude/skills/handoff/`) launches the app
+   and runs Claude as its backend. (Or tell Claude to read this README and run it.)
 3. Use the app in the preview pane. Keep the session open while you work; each request
    (channel search, drafting, sending) is processed by Claude within a few seconds.
 
