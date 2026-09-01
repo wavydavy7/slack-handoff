@@ -8,6 +8,7 @@ Serves the UI and a tiny file-based bridge:
 Claude (running in the companion session) watches requests.jsonl, does the
 Slack search / drafting / sending, and writes the response file.
 """
+import hashlib
 import json
 import os
 import time
@@ -18,9 +19,35 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 BRIDGE = os.path.join(BASE, "bridge")
 RESPONSES = os.path.join(BRIDGE, "responses")
 REQUESTS = os.path.join(BRIDGE, "requests.jsonl")
+KEYS = os.path.join(BRIDGE, "keys.jsonl")
 os.makedirs(RESPONSES, exist_ok=True)
 
 PORT = 8931
+
+# Read-only request types are answered from cache when an identical request was
+# already answered, so repeats (double-clicks, page reloads) resolve instantly
+# instead of waiting on a fresh Claude round trip. Sends always go to Claude.
+CACHEABLE = ("prepare", "lookup")
+
+
+def _cache_key(req):
+    payload = {"type": req.get("type"), "payload": req.get("payload")}
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
+
+
+def _cached_response(key):
+    if not os.path.exists(KEYS):
+        return None
+    with open(KEYS) as f:
+        entries = [json.loads(line) for line in f if line.strip()]
+    for entry in reversed(entries):
+        if entry["key"] != key:
+            continue
+        path = os.path.join(RESPONSES, entry["id"] + ".json")
+        if os.path.exists(path):
+            with open(path) as f:
+                return json.load(f)
+    return None
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -59,6 +86,17 @@ class Handler(BaseHTTPRequestHandler):
             rid = uuid.uuid4().hex[:12]
             req["id"] = rid
             req["ts"] = time.time()
+            if req.get("type") in CACHEABLE:
+                key = _cache_key(req)
+                cached = _cached_response(key)
+                if cached is not None:
+                    cached["id"] = rid
+                    with open(os.path.join(RESPONSES, rid + ".json"), "w") as f:
+                        json.dump(cached, f)
+                    self._send(200, {"id": rid})
+                    return
+                with open(KEYS, "a") as f:
+                    f.write(json.dumps({"id": rid, "key": key}) + "\n")
             with open(REQUESTS, "a") as f:
                 f.write(json.dumps(req) + "\n")
             self._send(200, {"id": rid})
