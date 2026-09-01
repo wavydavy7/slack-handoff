@@ -99,6 +99,11 @@
     <label>Relevant channels</label>
     <p class="hint">Uncheck any that shouldn't get the message.</p>
     <div id="channels"></div>
+    <div id="people-wrap" class="hidden">
+      <label style="margin-top:18px">Tag likely pingers</label>
+      <p class="hint">People who ping you most in these channels &mdash; checked ones are cc'd at the end of the message so they see the handoff directly.</p>
+      <div id="people"></div>
+    </div>
     <label for="draft" style="margin-top:18px">Message preview</label>
     <p class="hint">Edit freely &mdash; exactly this text is sent.</p>
     <textarea id="draft"></textarea>
@@ -142,6 +147,14 @@ async function request(type, payload) {
   throw new Error('Timed out waiting for Claude. Is the companion session still running?');
 }
 
+// Keeps a trailing "cc <@U...>" line in the draft in sync with the checked people.
+function updateCc() {
+  const tags = [...document.querySelectorAll('#people input:checked')].map(cb => `<@${cb.dataset.id}>`);
+  let text = $('draft').value.replace(/\n*cc (<@[^\n]*)?$/, '').trimEnd();
+  if (tags.length) text += '\n\ncc ' + tags.join(' ');
+  $('draft').value = text;
+}
+
 function show(step) {
   for (const s of ['step1', 'step2', 'step3']) $(s).classList.toggle('hidden', s !== step);
 }
@@ -168,7 +181,23 @@ $('prepare').onclick = async () => {
         </div>`;
       $('channels').appendChild(el);
     }
+    $('people').innerHTML = '';
+    $('people-wrap').classList.toggle('hidden', !(resp.people || []).length);
+    for (const p of resp.people || []) {
+      const el = document.createElement('label');
+      el.className = 'channel';
+      el.innerHTML = `
+        <input type="checkbox" ${p.preselected ? 'checked' : ''} data-id="${p.id}" data-name="${p.name}">
+        <div>
+          <div class="name">${p.name}</div>
+          <div class="meta">${p.meta || ''}</div>
+          <div class="why">${p.reason || ''}</div>
+        </div>`;
+      el.querySelector('input').addEventListener('change', updateCc);
+      $('people').appendChild(el);
+    }
     $('draft').value = resp.draft;
+    updateCc();
     show('step2');
   } catch (e) {
     alert(e.message);

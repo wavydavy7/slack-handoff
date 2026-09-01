@@ -35,7 +35,12 @@ each one yourself.
 ## Request/response shapes
 
 - prepare: `{type:"prepare", payload:{notes, who}}` →
-  `{status:"ok", channels:[{id,name,meta,reason,preselected}], draft}`
+  `{status:"ok", channels:[{id,name,meta,reason,preselected}],
+    people:[{id,name,meta,reason,preselected}], draft}`
+  `people` are likely pingers: Claude searches each relevant channel for the user's
+  mention token (`<@Uxxxx> in:#channel` — the `to:me` modifier is unreliable) and ranks
+  who @-mentions them most / most recently. Checked people become a trailing
+  `cc <@Uxxxx>` line the UI keeps in sync with the checkboxes.
 - send: `{type:"send", payload:{channels:[{id,name}], message}}` →
   `{status:"ok", results:[{channel, ok, detail}], note}`
 
