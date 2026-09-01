@@ -33,7 +33,7 @@
   }
   label { display: block; font-weight: 600; margin-bottom: 6px; }
   .hint { color: var(--muted); font-size: 0.85rem; margin: 2px 0 10px; }
-  textarea, input[type=text] {
+  textarea, input[type=text], input[type=number] {
     width: 100%; background: var(--panel2); color: var(--text);
     border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
     font: inherit; resize: vertical;
@@ -107,6 +107,11 @@
     <label for="draft" style="margin-top:18px">Message preview</label>
     <p class="hint">Edit freely &mdash; exactly this text is sent.</p>
     <textarea id="draft"></textarea>
+    <div class="row" style="margin-top:16px">
+      <label for="expiry" style="margin:0">Auto-redirect pings for</label>
+      <input id="expiry" type="number" value="14" min="0" max="90" style="width:72px">
+      <span class="hint" style="margin:0">days after sending (0 = no auto-replies)</span>
+    </div>
     <div class="row">
       <button id="back" class="ghost">&larr; Start over</button>
       <div id="send-status" class="status hidden"><span>Handing to Claude for delivery<span class="dots"></span></span></div>
@@ -216,7 +221,9 @@ $('send').onclick = async () => {
   $('send').disabled = true;
   $('send-status').classList.remove('hidden');
   try {
-    const resp = await request('send', {channels, message});
+    const raw = $('expiry').value.trim();
+    const responderDays = raw === '' ? 14 : Math.min(90, Math.max(0, parseInt(raw, 10) || 0));
+    const resp = await request('send', {channels, message, responder_days: responderDays});
     $('results').innerHTML = '';
     for (const r of resp.results || []) {
       const div = document.createElement('div');

@@ -41,7 +41,7 @@ each one yourself.
   mention token (`<@Uxxxx> in:#channel` — the `to:me` modifier is unreliable) and ranks
   who @-mentions them most / most recently. Checked people become a trailing
   `cc <@Uxxxx>` line the UI keeps in sync with the checkboxes.
-- send: `{type:"send", payload:{channels:[{id,name}], message}}` →
+- send: `{type:"send", payload:{channels:[{id,name}], message, responder_days}}` →
   `{status:"ok", results:[{channel, ok, detail}], note}`
 
 ## Thread auto-responder (optional)
@@ -54,7 +54,8 @@ the user in the handoff's channels, redirecting to the new owner.
   `expires` (auto-disarm date), `reply_template` (`{owner}` placeholder),
   `max_replies_per_run` (rate cap), `watermark_ts` + `replied_threads` (dedupe state).
 - At send time, Claude (the app backend) resolves the new owner's Slack ID and rewrites
-  the config: selected channels, owner, `expires` = +14 days, `watermark_ts` = now.
+  the config: selected channels, owner, `expires` = +`responder_days` from the UI's
+  expiry field (default 14, max 90; 0 skips arming entirely), `watermark_ts` = now.
   Drive has no content-update call, so state rewrites are create-new-then-trash-old.
 - The routine runs hourly (cloud routines have a 1-hour minimum interval), replies with
   exactly the template (marked as an automated redirect), caps replies per run, and
