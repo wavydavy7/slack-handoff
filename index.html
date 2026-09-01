@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Handoff</title>
+<style>
+  :root {
+    --bg: #0f1117; --panel: #181b23; --panel2: #1f2330;
+    --text: #e8eaf0; --muted: #9aa1b2; --accent: #6c8cff; --accent2: #4a6af0;
+    --ok: #3ecf8e; --err: #ff6b6b; --border: #2a2f3d;
+    font-size: 15px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f6f9; --panel: #ffffff; --panel2: #f0f2f7;
+      --text: #1a1d26; --muted: #5d6473; --accent: #3b5bdb; --accent2: #2b4acb;
+      --ok: #0ca678; --err: #e03131; --border: #dde1ea;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    display: flex; justify-content: center; min-height: 100vh;
+  }
+  main { width: min(720px, 94vw); padding: 32px 0 64px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 24px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 12px; padding: 20px; margin-bottom: 16px;
+  }
+  label { display: block; font-weight: 600; margin-bottom: 6px; }
+  .hint { color: var(--muted); font-size: 0.85rem; margin: 2px 0 10px; }
+  textarea, input[type=text] {
+    width: 100%; background: var(--panel2); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px;
+    font: inherit; resize: vertical;
+  }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  #notes { min-height: 130px; }
+  #draft { min-height: 220px; font-size: 0.92rem; line-height: 1.45; }
+  button {
+    font: inherit; font-weight: 600; border: 0; border-radius: 8px;
+    padding: 10px 18px; cursor: pointer;
+  }
+  button.primary { background: var(--accent); color: #fff; }
+  button.primary:hover { background: var(--accent2); }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .row { display: flex; gap: 10px; align-items: center; margin-top: 14px; }
+  .spacer { flex: 1; }
+  .channel {
+    display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px;
+    border: 1px solid var(--border); border-radius: 8px; margin-bottom: 8px;
+    background: var(--panel2); cursor: pointer;
+  }
+  .channel input { margin-top: 4px; }
+  .channel .name { font-weight: 600; }
+  .channel .meta { color: var(--muted); font-size: 0.85rem; margin-top: 2px; }
+  .channel .why { font-size: 0.85rem; margin-top: 4px; }
+  .status { display: flex; gap: 10px; align-items: center; color: var(--muted); }
+  .dots::after { content: ""; animation: dots 1.4s steps(4, end) infinite; }
+  @keyframes dots { 0% {content:"";} 25% {content:".";} 50% {content:"..";} 75% {content:"...";} }
+  .result { padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; font-size: 0.92rem; }
+  .result.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); }
+  .result.err { background: color-mix(in srgb, var(--err) 12%, transparent); }
+  .banner {
+    border-left: 3px solid var(--accent); background: var(--panel2);
+    padding: 10px 14px; border-radius: 0 8px 8px 0; font-size: 0.88rem;
+    color: var(--muted); margin-top: 12px;
+  }
+  a { color: var(--accent); }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Handoff</h1>
+  <p class="sub">Describe what you're handing off &mdash; Claude finds the relevant Slack channels and drafts the message.</p>
+
+  <!-- Step 1: notes -->
+  <section id="step1" class="card">
+    <label for="notes">What are you handing off?</label>
+    <p class="hint">Project name, current state, what's left, links, gotchas. Rough notes are fine.</p>
+    <textarea id="notes" placeholder="e.g. Handing off the agent-env harbor export work. Batch driver is done and merged, the VPN-free auth path still needs testing. Open PR #4123&hellip;"></textarea>
+    <label for="who" style="margin-top:14px">Handing off to</label>
+    <input id="who" type="text" placeholder="e.g. Sam Chen">
+    <div class="row">
+      <div id="prep-status" class="status hidden"><span>Claude is searching Slack and drafting<span class="dots"></span></span></div>
+      <div class="spacer"></div>
+      <button id="prepare" class="primary">Find channels &amp; draft</button>
+    </div>
+  </section>
+
+  <!-- Step 2: channels + preview -->
+  <section id="step2" class="card hidden">
+    <label>Relevant channels</label>
+    <p class="hint">Uncheck any that shouldn't get the message.</p>
+    <div id="channels"></div>
+    <label for="draft" style="margin-top:18px">Message preview</label>
+    <p class="hint">Edit freely &mdash; exactly this text is sent.</p>
+    <textarea id="draft"></textarea>
+    <div class="row">
+      <button id="back" class="ghost">&larr; Start over</button>
+      <div id="send-status" class="status hidden"><span>Handing to Claude for delivery<span class="dots"></span></span></div>
+      <div class="spacer"></div>
+      <button id="send" class="primary">Send</button>
+    </div>
+    <div class="banner">Send creates ready-to-send drafts in your Slack (one per channel) via Claude's connector &mdash; you fire each with one click in Slack. Nothing posts without that final click.</div>
+  </section>
+
+  <!-- Step 3: results -->
+  <section id="step3" class="card hidden">
+    <label>Delivery</label>
+    <div id="results"></div>
+    <div class="row">
+      <button id="again" class="ghost">New handoff</button>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let lastPrep = null;
+
+async function request(type, payload) {
+  const res = await fetch('/api/request', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({type, payload})
+  });
+  const {id} = await res.json();
+  // Poll for Claude's response (up to 5 min).
+  const deadline = Date.now() + 5 * 60 * 1000;
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, 1500));
+    const poll = await fetch('/api/response/' + id);
+    if (poll.status === 200) return poll.json();
+  }
+  throw new Error('Timed out waiting for Claude. Is the companion session still running?');
+}
+
+function show(step) {
+  for (const s of ['step1', 'step2', 'step3']) $(s).classList.toggle('hidden', s !== step);
+}
+
+$('prepare').onclick = async () => {
+  const notes = $('notes').value.trim();
+  if (!notes) { $('notes').focus(); return; }
+  $('prepare').disabled = true;
+  $('prep-status').classList.remove('hidden');
+  try {
+    const resp = await request('prepare', {notes, who: $('who').value.trim()});
+    if (resp.status !== 'ok') throw new Error(resp.error || 'Claude reported an error.');
+    lastPrep = resp;
+    $('channels').innerHTML = '';
+    for (const ch of resp.channels) {
+      const el = document.createElement('label');
+      el.className = 'channel';
+      el.innerHTML = `
+        <input type="checkbox" ${ch.preselected ? 'checked' : ''} data-id="${ch.id}" data-name="${ch.name}">
+        <div>
+          <div class="name">#${ch.name}</div>
+          <div class="meta">${ch.meta || ''}</div>
+          <div class="why">${ch.reason || ''}</div>
+        </div>`;
+      $('channels').appendChild(el);
+    }
+    $('draft').value = resp.draft;
+    show('step2');
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    $('prepare').disabled = false;
+    $('prep-status').classList.add('hidden');
+  }
+};
+
+$('send').onclick = async () => {
+  const channels = [...document.querySelectorAll('#channels input:checked')]
+    .map(cb => ({id: cb.dataset.id, name: cb.dataset.name}));
+  const message = $('draft').value.trim();
+  if (!channels.length) { alert('Pick at least one channel.'); return; }
+  if (!message) { alert('Message is empty.'); return; }
+  $('send').disabled = true;
+  $('send-status').classList.remove('hidden');
+  try {
+    const resp = await request('send', {channels, message});
+    $('results').innerHTML = '';
+    for (const r of resp.results || []) {
+      const div = document.createElement('div');
+      div.className = 'result ' + (r.ok ? 'ok' : 'err');
+      div.innerHTML = `<strong>#${r.channel}</strong> — ${r.detail}`;
+      $('results').appendChild(div);
+    }
+    if (resp.note) {
+      const n = document.createElement('div');
+      n.className = 'banner';
+      n.textContent = resp.note;
+      $('results').appendChild(n);
+    }
+    show('step3');
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    $('send').disabled = false;
+    $('send-status').classList.add('hidden');
+  }
+};
+
+$('back').onclick = () => show('step1');
+$('again').onclick = () => { $('notes').value = ''; $('who').value = ''; show('step1'); };
+</script>
+</body>
+</html>
